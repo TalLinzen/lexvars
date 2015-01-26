@@ -23,6 +23,7 @@ class LexVars(object):
 
     def __init__(self, clx):
         self.clx = clx
+        self._derivational_families = {}
 
     def wordnet_synsets(self, word):
         '''
@@ -51,6 +52,47 @@ class LexVars(object):
         noun_freq = self.pos_freq(lemma, 'noun')
         verb_freq = self.pos_freq(lemma, 'verb')
         return _smoothed_log_ratio(noun_freq, verb_freq)
+
+    def derivational_family(self, target, right=False, 
+                            include_multiword=False):
+        '''
+        right: If True, only count derived words that have the target word
+        as its leftmost morpheme (e.g. for "think" include "thinker" but
+        not "rethink").
+
+        include_multiword: If this option is set to False (default), only
+        one-word lemmas are considered. For example, "sleep in" and
+        "beauty-sleep" are ignored, but "oversleep" and "sleepwalk" are
+        included.
+        '''
+        families = self._get_derivational_families(right, include_multiword)
+        family = families[target]
+        return [self.clx.lemma_by_id(x) for x in family]
+
+    def derivational_entropy(self, target, right=False, smooth=1,
+                             include_multiword=False):
+        families = self._get_derivational_families(right, include_multiword)
+        frequencies = []
+        for family_member_id in families[target]:
+            frequencies.append(self.clx._lemmas[family_member_id]['Cob'])
+        return self.entropy(frequencies, smooth)
+
+    def _get_derivational_families(self, right, include_multiword):
+        key = (right, include_multiword)
+        families = self._derivational_families.setdefault(key, {})
+        if families == {}:
+            for lemma_id, lemma in enumerate(self.clx._lemmas):
+                multiword = '-' in lemma['Head'] or ' ' in lemma['Head']
+                if multiword and not include_multiword:
+                    continue
+                for parse in lemma['Parses']:
+                    morphemes = parse['Imm'].split('+')
+                    if right:
+                        morphemes = morphemes[:1]
+                    for morpheme in morphemes:
+                        entry = families.setdefault(morpheme, set())
+                        entry.add(lemma_id + 1)
+        return families
 
     def inflectional_entropy(self, lemma, kind='separate_bare', smooth=1,
                              verbose=False):
