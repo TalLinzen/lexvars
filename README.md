@@ -46,3 +46,50 @@ False
 >>> wfs[-2].FlectType
 ['past_tense', 'plural']
 ```
+
+## Derivational family
+```python
+>>> celex = Celex(celex_path)
+>>> celex.load_lemmas()
+>>> lv = LexVars(celex)
+
+>>> think_family = lv.derivational_family('think')
+>>> think_family
+[<CelexLemma 13412 "doublethink" (noun)>,
+<CelexLemma 38606 "rethink" (verb)>,
+<CelexLemma 47061 "think" (noun)>,
+<CelexLemma 47062 "think" (verb)>,
+<CelexLemma 47063 "thinkable" (adjective)>,
+<CelexLemma 47064 "thinker" (noun)>,
+<CelexLemma 3805 "bethink" (verb)>]
+
+>>> lv.derivational_family('think', right=True)
+[<CelexLemma 47064 "thinker" (noun)>,
+<CelexLemma 47061 "think" (noun)>,
+<CelexLemma 47062 "think" (verb)>,
+<CelexLemma 47063 "thinkable" (adjective)>]
+
+>>> lv.derivational_family('think', right=True, include_multiword=True)
+[<CelexLemma 47072 "think up" (verb)>,
+<CelexLemma 47061 "think" (noun)>,
+<CelexLemma 47062 "think" (verb)>,
+<CelexLemma 47063 "thinkable" (adjective)>,
+<CelexLemma 47064 "thinker" (noun)>,
+<CelexLemma 47067 "think of" (verb)>,
+<CelexLemma 47068 "think out" (verb)>,
+<CelexLemma 47069 "think over" (verb)>,
+<CelexLemma 47070 "think-tank" (noun)>,
+<CelexLemma 47071 "think through" (verb)>]
+
+>>> think_family[0].help('Cob')
+Frequency in the COBUILD corpus (17.9m words)
+
+>>> [x.Cob for x in think_family]
+[2, 32, 0, 35874, 2, 136, 5]
+
+>>> lv.derivational_entropy('think')
+0.17897018795918829
+
+>>> lv.inflectional_entropy('think')
+1.5716274042735443
+```
