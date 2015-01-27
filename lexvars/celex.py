@@ -450,15 +450,19 @@ class Celex(object):
         return record
 
     def lemma_by_id(self, lemma_id):
+        self.load_lemmas()
         return CelexLemma(self._lemmas[lemma_id - 1])
 
     def lemma_lookup(self, x):
+        self.load_lemmas()
         return [CelexLemma(l) for l in self._lemma_lookup[x]]
 
     def wordform_by_id(self, wf_id):
+        self.load_wordforms()
         return CelexWordform(self._wordforms[wf_id - 1])
 
     def wordform_lookup(self, x):
+        self.load_wordforms()
         return [CelexWordform(wf) for wf in self._wf_lookup[x]]
 
     def lemma_to_wordforms(self, lemma):
@@ -466,5 +470,6 @@ class Celex(object):
         Takes a CelexLemma object and returns a list of CelexWordform objects
         corresponding to each of the wordforms connected to the lemma
         '''
+        self.map_lemmas_to_wordforms()
         return [self.wordform_by_id(wf_id) for wf_id in 
                 self._lemmas_to_wordforms[lemma.IdNum - 1]]
