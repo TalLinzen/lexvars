@@ -365,6 +365,7 @@ class Celex(object):
     def __init__(self, celex_english_root, dbs=None):
         self._lemmas = None
         self._wordforms = None
+        self._lemmas_to_wordforms = None
         self.celex_english_root = celex_english_root
         if dbs is None:
             self.dbs = self.supported_dbs
@@ -394,6 +395,10 @@ class Celex(object):
             self._wf_lookup.setdefault(wf['Word'], []).append(wf)
 
     def map_lemmas_to_wordforms(self):
+        if self._lemmas_to_wordforms is not None:
+            return
+        self.load_lemmas()
+        self.load_wordforms()
         self._lemmas_to_wordforms = [[] for x in range(len(self._lemmas))]
         for wordform in self._wordforms:
             wf_id = int(wordform['IdNum'])

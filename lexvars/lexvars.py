@@ -78,6 +78,7 @@ class LexVars(object):
         return self.entropy(frequencies, smooth)
 
     def _get_derivational_families(self, right, include_multiword):
+        self.clx.load_lemmas()
         key = (right, include_multiword)
         families = self._derivational_families.setdefault(key, {})
         if families == {}:
@@ -137,6 +138,7 @@ class LexVars(object):
         aches (plural), aches (3rd singular present),
         aching (participle), ached (past tense), ached (participles)
         '''
+        self.clx.map_lemmas_to_wordforms()
 
         clx_lemmas = self.clx.lemma_lookup(lemma)
         # Use __builtin__ here in case sum is overshadowed by numpy
