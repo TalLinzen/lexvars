@@ -9,6 +9,7 @@ import math
 import os
 import pickle
 import re
+import collections
 
 
 regexp = re.compile(r'#S\(EPATTERN.*?\(VSUBCAT (?P<frame>.*?)\)'
@@ -37,7 +38,7 @@ class Valex(object):
     >> vlx.read_csv(path_to_csv_file)
     '''
 
-    def __init__(self, path, collapse_anlt=False):
+    def __init__(self, path, collapse_anlt=False, verb_pos=False):
         '''
         path: directory where .lex or .lex.bz2 files are located; for example,
             valex_root/release/lexicons/lex-lrec5
@@ -45,10 +46,14 @@ class Valex(object):
         collapse_anlt: if true, use the coarse grained distinctions in ANLT,
             rather than the many distinctions made by VALEX, which 
             distinguishes more than a 100
+            
+        verb_pos: if true, include frequency information about verb part of
+            speech (VV0, VVN, etc.) for each subcategorization frame
         '''
         self.verbs = {}
         self.path = path
         self.collapse_anlt = collapse_anlt
+        self.verb_pos = verb_pos
 
     def entropy(self, verb):
         result = 0
@@ -66,7 +71,7 @@ class Valex(object):
             if fname_parts[-1] in ['bz2', 'lex']:
                 filename = os.path.join(self.path, verb_file)
                 self.verbs[fname_parts[0]] = self.read_lex_file(filename)
-
+      
     def read_lex_file(self, filename):
         _, ext = os.path.splitext(filename) 
         if ext == '.bz2':
@@ -79,6 +84,13 @@ class Valex(object):
             d = match.groupdict()
             d['freqcnt'] = int(d['freqcnt'])
             d['relfreq'] = float(d['relfreq'])
+            if self.verb_pos:
+                index = s.find(r'(VV', match.end())
+                if index < s.index(r'SLTL', match.end()) and index > 0:
+                    pos = s[index+1:s.index(r')', match.end())].split()
+                    d['pos'] = dict(collections.Counter(pos))
+                else:
+                    d['pos'] = dict()
             matches.append(d)
 
         if self.collapse_anlt:
@@ -87,9 +99,22 @@ class Valex(object):
             matches.sort(key=key)
             for frame, g in itertools.groupby(matches, key):
                 l = list(g)
-                collapsed.append({'frame': frame,
-                                  'freqcnt': sum(x['freqcnt'] for x in l),
-                                  'relfreq': sum(x['relfreq'] for x in l)})
+                if self.verb_pos:
+                    clps = {'frame': frame,
+                            'freqcnt': sum(x['freqcnt'] for x in l),
+                            'relfreq': sum(x['relfreq'] for x in l)}
+                    vv = set()
+                    for i in l:
+                        vv = vv.union(set(i['pos'].keys()))
+                    pos = {i: 0 for i in vv}
+                    for p in pos.iterkeys():
+                        pos[p] = sum([i['pos'][p] for i in l if p in i['pos'].keys()])
+                    clps['pos'] = pos
+                    collapsed.append(clps)
+                else:
+                    collapsed.append({'frame': frame,
+                                      'freqcnt': sum(x['freqcnt'] for x in l),
+                                      'relfreq': sum(x['relfreq'] for x in l)})
             return collapsed
         else:
             return matches
