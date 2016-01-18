@@ -19,7 +19,9 @@ db_fields = {
     'efw': ['IdNum', 'Word', 'IdNumLemma', 'Cob', 'CobDev', 'CobMln',
             'CobLog', 'CobW', 'CobWMln', 'CobWLog', 'CobS', 'CobSMln',
             'CobSLog'],
-    'emw': ['IdNum', 'Word', 'Cob', 'IdNumLemma', 'FlectType', 'TransInfl']
+    'emw': ['IdNum', 'Word', 'Cob', 'IdNumLemma', 'FlectType', 'TransInfl'],
+    'epw': ['IdNum', 'Word', 'Cob', 'IdNumLemma', 'PronCnt', 'PronStatus',
+            'PhonStrsDISC', 'PhonCVBr', 'PhonSylBCLX'],
 }
 
 field_keys = {
@@ -132,6 +134,11 @@ field_keys = {
         'N': 'none'
     },
 
+    'PronStatus': {
+        'P': 'Primary',
+        'S': 'Secondary'
+    }
+
 }
 
 
@@ -240,6 +247,21 @@ class CelexMorphParse(CelexRecord):
         return '<CelexMorphParse %s>' % self.Imm
 
 
+class CelexPronunciation(CelexRecord):
+
+    _subclass_fields = [
+        ('PronStatus', 'decoded_char', 'Status of pronunciation'),
+        ('PhonStrsDISC', str, 'Syllabified and stressed DISC transcription'),
+        ('PhonCVBr', str, 'Phonetic CV pattern, with brackets'),
+        ('PhonSylBCLX', str, 'Syllabified CELEX char set, brackets')
+    ]
+
+    _has_frequency = False
+
+    def __repr__(self):
+        return '<CelexPronunciation %s>' % self.PhonSylBCLX
+
+
 class CelexLemma(CelexRecord):
 
     _subclass_fields = [
@@ -295,6 +317,7 @@ class CelexLemma(CelexRecord):
          'proof")'),
         ('Pron_PRON', 'boolean', 'Pronominal pronoun that can replace a noun, '
          'e.g. "mine" in "mine is better"'),
+        ('PronCnt', int, 'Number of pronunciations'),
         ('Pred_A', 'boolean', 'Predicative adjective ("awake")'),
         ('Pred_ADV', 'boolean', 'Predicative adverb ("adrift")'),
         ('Prep_V', 'boolean', 'Verb with preposition ("minister to")'),
@@ -314,6 +337,7 @@ class CelexLemma(CelexRecord):
 
     def __init__(self, d):
         self.Parses = [CelexMorphParse(x) for x in d['Parses']]
+        self.Prons = [CelexPronunciation(x) for x in d['Prons']]
         super(CelexLemma, self).__init__(d)
 
     def __repr__(self):
@@ -333,10 +357,16 @@ class CelexWordform(CelexRecord):
          '"abide" is removed, and then the suffix -ing is added.'),
         ('IdNum', int, ''),
         ('IdNumLemma', int, ''),
-        ('FlectType', 'decoded_list', 'List of inflectional categories')
+        ('FlectType', 'decoded_list', 'List of inflectional categories'),
+        ('PronCnt', int, 'Number of pronunciations'),
+        ('Head', str, 'Head')
     ]
 
     _has_frequency = True
+
+    def __init__(self, d):
+        self.Prons = [CelexPronunciation(x) for x in d['Prons']]
+        super(CelexWordform, self).__init__(d)
 
     def __repr__(self):
         return '<CelexWordform %d "%s">' % (self.IdNum, self.Word)
@@ -344,7 +374,8 @@ class CelexWordform(CelexRecord):
 
 class Celex(object):
     '''
-    Supported DBs are 's' (syntax), 'm' (morphology) and 'f' (frequency)
+    Supported DBs are 's' (syntax), 'm' (morphology), 'f' (frequency)
+    and 'p' (phonology)
     '''
 
     eml_base = ['IdNum', 'Head', 'Cob', 'MorphStatus', 'Lang', 'MorphCnt']
@@ -354,13 +385,19 @@ class Celex(object):
                  'TransDer', 'ImmInfix', 'ImmRevers', 'FlatSA', 'StrucLab',
                  'StrucAllo', 'StrucSubst', 'StrucOpac']
 
-    supported_dbs = ['s', 'm', 'f']
+    epl_base = ['IdNum', 'Head', 'Cob', 'PronCnt']
+    epw_base = ['IdNum', 'Head', 'Cob', 'IdNumLemma', 'PronCnt']
+    ep_pron = ['PronStatus', 'PhonStrsDISC', 'PhonCVBr', 'PhonSylBCLX']
+
+    supported_dbs = ['s', 'm', 'f', 'p']
 
     # If a word has more than 4 parses, they don't all fit in
     # the same line. We ignore the additional parses for these
     # words (copyholder, leaseholder, potterer, putterer,
     # southeaster, southwester; see eml/README)
-    max_eml_parses = 4
+    max_parses = 4
+    max_epl_prons = 24
+    max_epw_prons = 23
 
     def __init__(self, celex_english_root, dbs=None):
         self._lemmas = None
@@ -422,8 +459,18 @@ class Celex(object):
             actual_fields = x.strip().split('\\')
             if db == 'eml':
                 n_parses = min(max(1, int(actual_fields[5])), 
-                               self.max_eml_parses)
+                               self.max_parses)
                 expected_fields = self.eml_base + n_parses * self.eml_parse
+            elif db == 'epl':
+                cnt = len(self.epl_base) - 1
+                n_prons = min(max(1, int(actual_fields[cnt])), 
+                              self.max_epl_prons)
+                expected_fields = self.epl_base + n_prons * self.ep_pron
+            elif db == 'epw':
+                cnt = len(self.epw_base) - 1
+                n_prons = min(max(1, int(actual_fields[cnt])),
+                              self.max_epw_prons)
+                expected_fields = self.epw_base + n_prons * self.ep_pron
             else:
                 expected_fields = db_fields[db]
 
@@ -433,6 +480,12 @@ class Celex(object):
                                  (len(actual_fields), len(expected_fields)))
             if db == 'eml':
                 record = self.parse_eml(actual_fields)
+            elif db == 'epl':
+                record = self.parse_ep(self.epl_base, self.max_epl_prons,
+                                       actual_fields) 
+            elif db == 'epw':
+                record = self.parse_ep(self.epw_base, self.max_epw_prons,
+                                       actual_fields) 
             else:
                 record = dict(zip(expected_fields, actual_fields))
             records.append(record)
@@ -441,12 +494,23 @@ class Celex(object):
     def parse_eml(self, fields):
         record = dict(zip(self.eml_base, fields))
         record['Parses'] = []
-        n_parses = min(int(record['MorphCnt']), self.max_eml_parses)
+        n_parses = min(int(record['MorphCnt']), self.max_parses)
         for i in range(n_parses):
             start = len(self.eml_base) + i * len(self.eml_parse)
             end = len(self.eml_base) + (i + 1) * len(self.eml_parse)
             d = dict(zip(self.eml_parse, fields[start:end]))
             record['Parses'].append(d)
+        return record
+
+    def parse_ep(self, ep_base, max_prons, fields):
+        record = dict(zip(ep_base, fields))
+        record['Prons'] = []
+        n_prons = min(int(record['PronCnt']), max_prons)
+        for i in range(n_prons):
+            start = len(ep_base) + i * len(self.ep_pron)
+            end = len(ep_base) + (i + 1) * len(self.ep_pron)
+            d = dict(zip(self.ep_pron, fields[start:end]))
+            record['Prons'].append(d)
         return record
 
     def lemma_by_id(self, lemma_id):
