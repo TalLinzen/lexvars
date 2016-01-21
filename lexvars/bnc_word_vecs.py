@@ -11,7 +11,7 @@ import nltk.corpus
 from nltk.corpus.reader.wordnet import NOUN, VERB, ADJ, ADV
 
 
-class BNCWordVecs(object): 
+class BNCWordVecs(object):
     '''
     Punctuation, capitalization, and sentence/utterance boundary information are
     removed.
@@ -75,26 +75,31 @@ class BNCWordVecs(object):
         else:
             self.stopwords = set(stopwords)
 
-    def initialize_matrix(self):
-        keys = self.context_words.keys()
-        for tw in self.target_words:
-            self.vectors[tw] = dict((cw, 0) for cw in keys)
+    def initialize_matrix(self, bigrams=False):
+        if not bigrams:
+            keys = self.context_words.keys()
+            for tw in self.target_words:
+                self.vectors[tw] = dict((cw, 0) for cw in keys)
+        elif bigrams:
+            for tw in self.target_words:
+                self.vectors[tw] = {}
 
-    def read_file(self, filename):
+    def read_file(self, filename, bigrams=False):
         contents = open(filename).read()
         words = self.word_regex.finditer(contents)
         lemmatized = []
 
-        # remove punctuation, capitalization, and sentence/utterance 
+        # remove punctuation, capitalization, and sentence/utterance
         # boundary information
         for word in words:
             self.total_n_words += 1
             if word.group(2) is None:
                 continue
             normalized = word.group(2).lower().strip()
-            if (normalized in self.stopwords or normalized in ['', "n't"] or
-                    normalized[0] == "'"):
-                continue
+            if not bigrams:
+                if (normalized in self.stopwords or normalized in ['', "n't"] or
+                        normalized[0] == "'"):
+                    continue
             penn_pos = word.group(1)
             wordnet_pos = self.pos_map.get(penn_pos[0], VERB)
             lemma = self.lemmatizer.lemmatize(normalized, wordnet_pos)
@@ -113,6 +118,13 @@ class BNCWordVecs(object):
             for j in range(lower, i) + range(i + 1, upper):
                 if is_context_word[j]:
                     self.vectors[words[i]][words[j]] += 1
+
+    def process_bigrams(self, words):
+        for i in range(len(words)-1):
+            if words[i] not in self.target_words:
+                continue
+            self.vectors[words[i]].setdefault(words[i+1], 0)
+            self.vectors[words[i]][words[i+1]] += 1
 
     def all_files(self):
         for f1 in os.listdir(self.corpus_root):
@@ -152,15 +164,35 @@ class BNCWordVecs(object):
                     cd += term
             self.cds[w] = cd
 
+    def calculate_entropy(self):
+        self.entropies = {}
 
-    def read_all(self, process=False):
+        for w, vector in self.vectors.items():
+            total_freq = float(sum(vector.values()))
+            if total_freq == 0:
+                ent = None
+            else:
+                ent = 0
+                for cont, freq in vector.items():
+                    relfreq = freq / total_freq
+                    if relfreq == 0:
+                        term = 0
+                    else:
+                        term = -1 * relfreq * (math.log(relfreq) / math.log(2))
+                    ent += term
+            self.entropies[w] = ent
+
+    def read_all(self, process=False, bigrams=False):
         self.total_n_words = 0
         if process:
-            self.initialize_matrix()
+            self.initialize_matrix(bigrams=bigrams)
         for filename in self.all_files():
-            words = self.read_file(filename)
+            words = self.read_file(filename, bigrams=bigrams)
             if process:
-                self.process(words)
+                if not bigrams:
+                    self.process(words)
+                elif bigrams:
+                    self.process_bigrams(words)
 
     def save_context_words(self, filename):
         common = self.frequencies.most_common(self.n_context_words)
