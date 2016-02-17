@@ -87,7 +87,7 @@ class BNCWordVecs(object):
     def read_file(self, filename, bigrams=False):
         contents = open(filename).read()
         words = self.word_regex.finditer(contents)
-        lemmatized = []
+        lemmatized, lemma_pos = [], []
 
         # remove punctuation, capitalization, and sentence/utterance
         # boundary information
@@ -104,9 +104,10 @@ class BNCWordVecs(object):
             wordnet_pos = self.pos_map.get(penn_pos[0], VERB)
             lemma = self.lemmatizer.lemmatize(normalized, wordnet_pos)
             lemmatized.append(lemma)
+            lemma_pos.append(wordnet_pos)
 
         self.frequencies.update(lemmatized)
-        return lemmatized
+        return lemmatized, lemma_pos
 
     def process(self, words):
         is_context_word = [x in self.context_words for x in words]
@@ -119,9 +120,10 @@ class BNCWordVecs(object):
                 if is_context_word[j]:
                     self.vectors[words[i]][words[j]] += 1
 
-    def process_bigrams(self, words):
+    def process_bigrams(self, words, verbs_only=False, lemma_pos=None):
+        is_verb = [x == VERB for x in lemma_pos]
         for i in range(len(words)-1):
-            if words[i] not in self.target_words:
+            if words[i] not in self.target_words or (verbs_only and not is_verb[i]):
                 continue
             self.vectors[words[i]].setdefault(words[i+1], 0)
             self.vectors[words[i]][words[i+1]] += 1
@@ -182,17 +184,17 @@ class BNCWordVecs(object):
                     ent += term
             self.entropies[w] = ent
 
-    def read_all(self, process=False, bigrams=False):
+    def read_all(self, process=False, bigrams=False, verbs_only=False):
         self.total_n_words = 0
         if process:
             self.initialize_matrix(bigrams=bigrams)
         for filename in self.all_files():
-            words = self.read_file(filename, bigrams=bigrams)
+            words, pos = self.read_file(filename, bigrams=bigrams)
             if process:
                 if not bigrams:
                     self.process(words)
                 elif bigrams:
-                    self.process_bigrams(words)
+                    self.process_bigrams(words, verbs_only=verbs_only, lemma_pos=pos)
 
     def save_context_words(self, filename):
         common = self.frequencies.most_common(self.n_context_words)
