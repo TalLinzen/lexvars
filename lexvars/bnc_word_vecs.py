@@ -120,13 +120,17 @@ class BNCWordVecs(object):
                 if is_context_word[j]:
                     self.vectors[words[i]][words[j]] += 1
 
-    def process_bigrams(self, words, verbs_only=False, lemma_pos=None):
+    def process_bigrams(self, words, verbs_only=False, lemma_pos=None, which_word='first'):
         is_verb = [x == VERB for x in lemma_pos]
         for i in range(len(words)-1):
             if words[i] not in self.target_words or (verbs_only and not is_verb[i]):
                 continue
-            self.vectors[words[i]].setdefault(words[i+1], 0)
-            self.vectors[words[i]][words[i+1]] += 1
+            if which_word == 'first':
+                self.vectors[words[i]].setdefault(words[i+1], 0)
+                self.vectors[words[i]][words[i+1]] += 1
+            elif which_word == 'second':
+                self.vectors[words[i]].setdefault(words[i-1], 0)
+                self.vectors[words[i]][words[i-1]] += 1
 
     def all_files(self):
         for f1 in os.listdir(self.corpus_root):
@@ -184,7 +188,7 @@ class BNCWordVecs(object):
                     ent += term
             self.entropies[w] = ent
 
-    def read_all(self, process=False, bigrams=False, verbs_only=False):
+    def read_all(self, process=False, bigrams=False, verbs_only=False, which_word='first'):
         self.total_n_words = 0
         if process:
             self.initialize_matrix(bigrams=bigrams)
@@ -194,7 +198,7 @@ class BNCWordVecs(object):
                 if not bigrams:
                     self.process(words)
                 elif bigrams:
-                    self.process_bigrams(words, verbs_only=verbs_only, lemma_pos=pos)
+                    self.process_bigrams(words, verbs_only=verbs_only, lemma_pos=pos, which_word=which_word)
 
     def save_context_words(self, filename):
         common = self.frequencies.most_common(self.n_context_words)
